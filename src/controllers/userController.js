@@ -9,22 +9,22 @@ export const registerUser = async (req, res) => {
   }
 
   try {
-    // Registrar usuario en Better Auth
-    const authResponse = await auth.createUser({
-      email,
-      password
-    });
+    // Hash the password
+    const hashedPassword = await auth.hashPassword(password);
 
-    // Guardar usuario en PostgreSQL
+    // Save user in PostgreSQL
     const pool = getPool();
     const dbResponse = await pool.query(
       'INSERT INTO users (email, auth_id) VALUES ($1, $2) RETURNING id, email',
-      [email, authResponse.userId]
+      [email, hashedPassword]
     );
+
+    // Generate tokens
+    const tokens = await auth.generateToken(dbResponse.rows[0].id);
 
     res.status(201).json({
       user: dbResponse.rows[0],
-      token: authResponse.token
+      ...tokens
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -43,29 +43,53 @@ export const loginUser = async (req, res) => {
   }
 
   try {
-    // Autenticar usuario en Better Auth
-    const authResponse = await auth.authenticateUser({
-      email,
-      password
-    });
-
-    // Obtener información del usuario de la base de datos
+    // Get user from database
     const pool = getPool();
     const dbResponse = await pool.query(
-      'SELECT id, email FROM users WHERE email = $1',
+      'SELECT id, email, auth_id FROM users WHERE email = $1',
       [email]
     );
 
     if (dbResponse.rows.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    const user = dbResponse.rows[0];
+
+    // Verify password
+    const isValidPassword = await auth.comparePasswords(password, user.auth_id);
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Generate tokens
+    const tokens = await auth.generateToken(user.id);
+
     res.status(200).json({
-      user: dbResponse.rows[0],
-      token: authResponse.token
+      user: {
+        id: user.id,
+        email: user.email
+      },
+      ...tokens
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(401).json({ message: 'Invalid credentials' });
+    res.status(500).json({ message: 'Error during login' });
+  }
+};
+
+export const refreshToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ message: 'Refresh token is required' });
+  }
+
+  try {
+    const tokens = await auth.refreshAccessToken(refreshToken);
+    res.json(tokens);
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ message: 'Invalid refresh token' });
   }
 };
