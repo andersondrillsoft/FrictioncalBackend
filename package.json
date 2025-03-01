@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "dev": "yarn nodemon src/index.js",
     "migrate": "node src/utils/migrate.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -23,5 +23,8 @@
     "express-rate-limit": "^7.1.5",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
